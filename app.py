@@ -118,7 +118,7 @@ st.markdown("### Modelo YOLO11s - mAP50: 82.7%")
 def load_model():
     # URL de tu modelo en Hugging Face o Google Drive
     # Opción A: Si lo subes a Hugging Face Hub
-    model_url = "https://huggingface.co/spaces/EAMB2001/DetectorPlagas/tree/main"
+    model_url = "https://huggingface.co/EAMB2001/detector-plagas-modelo/resolve/main/modelo.pt"
     
     # Descargar modelo
     response = requests.get(model_url)
