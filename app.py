@@ -11,8 +11,8 @@ import os
 
 st.set_page_config(page_title="Detector de Plagas", layout="wide")
 
-st.title("🍃 Detector de Mosca Blanca en Hojas de Algodon")
-st.markdown("### By: Erick Mera - Kevin Garcia")
+st.title("🍃 Detector de Plagas en Hojas")
+st.markdown("### Modelo YOLO11s - mAP50: 82.7%")
 
 # ==========================================
 # CONFIGURACIÓN DE TELEGRAM
@@ -86,32 +86,33 @@ def analizar_imagen_yolo(imagen_bytes):
         return None, 0, None
 
 # ==========================================
-# BOT DE TELEGRAM (POLLING)
+# BOT DE TELEGRAM (POLLING CORREGIDO)
 # ==========================================
-processed_messages = set()
+last_update_id = 0
 
 def bot_telegram_polling():
     """Revisa mensajes nuevos de Telegram cada 3 segundos"""
-    global processed_messages
+    global last_update_id
     
     while True:
         try:
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates?offset=-1"
-            response = requests.get(url, timeout=10)
+            # Calcular offset correcto para evitar duplicados
+            offset = last_update_id + 1 if last_update_id > 0 else -1
+            
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates?offset={offset}&timeout=10"
+            response = requests.get(url, timeout=15)
             
             if response.status_code == 200:
                 updates = response.json().get('result', [])
                 
                 for update in updates:
+                    update_id = update.get('update_id')
                     message = update.get('message', {})
-                    message_id = message.get('message_id')
                     chat_id = message.get('chat', {}).get('id')
                     
-                    # Si ya procesamos este mensaje, saltar
-                    if message_id in processed_messages:
-                        continue
-                    
-                    processed_messages.add(message_id)
+                    # Actualizar último update procesado
+                    if update_id > last_update_id:
+                        last_update_id = update_id
                     
                     # Verificar si es una foto
                     if 'photo' in message:
@@ -258,6 +259,8 @@ if uploaded_file is not None and model is not None:
 st.markdown("---")
 st.markdown("""
 ### ℹ️ Información:
-- **Alertas automáticas:** Si se detecta una hoja en estado CRITICO o NADA SALUDABLE envia una notificicación en tiempo real a Telegram'
+- **Alertas automáticas:** Se envían cuando se detecta 'Crítico' o 'Nada Saludable'
+- **Bot de Telegram:** Envía imágenes al bot para análisis instantáneo
+- **Modelo:** YOLO11s entrenado con mAP50: 82.7%
 - **Zona horaria:** Ecuador (UTC-5)
 """)
