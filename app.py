@@ -3,11 +3,11 @@ from ultralytics import YOLO
 from PIL import Image
 import requests
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 st.set_page_config(page_title="Detector de Plagas", layout="wide")
 
-st.title("🍃 Detector de Mosca Blanca en Hojas de Algodón")
+st.title("🍃 Detector de Mosca Blanca en Hojas de Algodon")
 st.markdown("### By: Erick Mera - Kevin Garcia")
 
 # ==========================================
@@ -21,13 +21,17 @@ def enviar_alerta_telegram(clase, confianza, imagen_bytes=None):
     if clase not in ['Crítico', 'Nada Saludable']:
         return False
     
+    # Zona horaria de Ecuador (UTC-5)
+    ecuador_tz = timezone(timedelta(hours=-5))
+    ahora = datetime.now(ecuador_tz)
+    
     mensaje = f"""
 🚨 *ALERTA DE PLAGA DETECTADA* 
 
 🍃 *Clase:* {clase}
 📊 *Confianza:* {confianza:.2f}%
- *Hora:* {datetime.now().strftime('%H:%M:%S')}
-📅 *Fecha:* {datetime.now().strftime('%d/%m/%Y')}
+ *Hora:* {ahora.strftime('%H:%M:%S')}
+📅 *Fecha:* {ahora.strftime('%d/%m/%Y')}
 
 ⚠️ *Acción recomendada:* Revisar planta inmediatamente
     """
@@ -80,7 +84,7 @@ except Exception as e:
 # ==========================================
 # INTERFAZ PRINCIPAL
 # ==========================================
-uploaded_file = st.file_uploader("📷 Sube una imagen de hoja", type=['jpg', 'png', 'jpeg'])
+uploaded_file = st.file_uploader(" Sube una imagen de hoja", type=['jpg', 'png', 'jpeg'])
 
 if uploaded_file is not None and model is not None:
     col1, col2 = st.columns(2)
@@ -124,7 +128,7 @@ if uploaded_file is not None and model is not None:
                         img_byte_arr = img_byte_arr.getvalue()
                         
                         if enviar_alerta_telegram(clase, conf, img_byte_arr):
-                            st.warning("⚠️ **Alerta enviada a Telegram**")
+                            st.warning("️ **Alerta enviada a Telegram**")
                         else:
                             st.error("❌ Error al enviar alerta")
                     else:
@@ -135,7 +139,7 @@ if uploaded_file is not None and model is not None:
 
 st.markdown("---")
 st.markdown("""
-### ️ Información:
-- **Alertas automáticas:** 
-Si se detecta una hoja en estado CRITICO o NADA SALUDABLE se envia una notificacion en tiempo real a Telegram
+### ℹ️ Información:
+- **Alertas automáticas:** Si se detecta una hoja en estado CRITICO o NADA SALUDABLE se envia una notificación en tiempo real a Telegram
+- **Zona horaria:** Ecuador (UTC-5)
 """)
