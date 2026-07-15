@@ -4,10 +4,6 @@ from PIL import Image
 import requests
 from io import BytesIO
 from datetime import datetime, timezone, timedelta
-import threading
-import time
-import json
-import os
 
 st.set_page_config(page_title="Detector de Plagas", layout="wide")
 
@@ -15,145 +11,54 @@ st.title("🍃 Detector de Plagas en Hojas")
 st.markdown("### Modelo YOLO11s - mAP50: 82.7%")
 
 # ==========================================
-# CONFIGURACIÓN DE TELEGRAM
+# CONFIGURACIÓN DE TELEGRAM - TUS DATOS
 # ==========================================
 TELEGRAM_BOT_TOKEN = "8725129241:AAGBYwVLnmVfbBUa9RVjIdQD2AaOswKjinc"
 TELEGRAM_CHAT_ID = "7700414080"
 
-# Zona horaria Ecuador
-ecuador_tz = timezone(timedelta(hours=-5))
+def enviar_alerta_telegram(clase, confianza, imagen_bytes=None):
+    """Envía alerta a Telegram solo si es crítico o nada saludable"""
+    if clase not in ['Crítico', 'Nada Saludable']:
+        return False
+    
+    # Zona horaria de Ecuador (UTC-5)
+    ecuador_tz = timezone(timedelta(hours=-5))
+    ahora = datetime.now(ecuador_tz)
+    
+    mensaje = f"""
+🚨 *ALERTA DE PLAGA DETECTADA* 
 
-# ==========================================
-# FUNCIONES DE TELEGRAM
-# ==========================================
-def enviar_mensaje_telegram(chat_id, texto, imagen_bytes=None):
-    """Envía mensaje a Telegram"""
+🍃 *Clase:* {clase}
+📊 *Confianza:* {confianza:.2f}%
+ *Hora:* {ahora.strftime('%H:%M:%S')}
+📅 *Fecha:* {ahora.strftime('%d/%m/%Y')}
+
+⚠️ *Acción recomendada:* Revisar planta inmediatamente
+    """
+    
     try:
+        # Enviar mensaje de texto
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         requests.post(url, json={
-            "chat_id": chat_id,
-            "text": texto,
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": mensaje,
             "parse_mode": "Markdown"
         }, timeout=10)
         
+        # Enviar imagen si está disponible
         if imagen_bytes:
             url_foto = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
             files = {'photo': imagen_bytes}
-            data = {"chat_id": chat_id}
+            data = {
+                "chat_id": TELEGRAM_CHAT_ID,
+                "caption": f"📸 Evidencia: {clase} - {confianza:.2f}%"
+            }
             requests.post(url_foto, files=files, data=data, timeout=10)
         
         return True
     except Exception as e:
-        print(f"Error Telegram: {e}")
+        st.error(f"Error enviando a Telegram: {e}")
         return False
-
-def descargar_imagen_telegram(file_id):
-    """Descarga imagen desde Telegram"""
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getFile?file_id={file_id}"
-    response = requests.get(url)
-    file_path = response.json()['result']['file_path']
-    
-    url_download = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}"
-    response = requests.get(url_download)
-    
-    return response.content
-
-def analizar_imagen_yolo(imagen_bytes):
-    """Analiza imagen con YOLO y retorna resultados"""
-    try:
-        image = Image.open(BytesIO(imagen_bytes))
-        temp_path = "/tmp/telegram_image.jpg"
-        image.save(temp_path)
-        
-        results = model(temp_path, verbose=False)
-        boxes = results[0].boxes
-        
-        if len(boxes) > 0:
-            mejor = max(boxes, key=lambda b: float(b.conf[0]))
-            clase = CLASSES[int(mejor.cls[0])]
-            conf = float(mejor.conf[0]) * 100
-            
-            # Imagen con detecciones
-            result_img = results[0].plot()
-            img_byte_arr = BytesIO()
-            Image.fromarray(result_img).save(img_byte_arr, format='JPEG')
-            
-            return clase, conf, img_byte_arr.getvalue()
-        else:
-            return None, 0, None
-    except Exception as e:
-        print(f"Error analizando imagen: {e}")
-        return None, 0, None
-
-# ==========================================
-# BOT DE TELEGRAM (POLLING)
-# ==========================================
-processed_messages = set()
-
-def bot_telegram_polling():
-    """Revisa mensajes nuevos de Telegram cada 3 segundos"""
-    global processed_messages
-    
-    while True:
-        try:
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates?offset=-1"
-            response = requests.get(url, timeout=10)
-            
-            if response.status_code == 200:
-                updates = response.json().get('result', [])
-                
-                for update in updates:
-                    message = update.get('message', {})
-                    message_id = message.get('message_id')
-                    chat_id = message.get('chat', {}).get('id')
-                    
-                    # Si ya procesamos este mensaje, saltar
-                    if message_id in processed_messages:
-                        continue
-                    
-                    processed_messages.add(message_id)
-                    
-                    # Verificar si es una foto
-                    if 'photo' in message:
-                        # Obtener la foto de mayor resolución
-                        photo = message['photo'][-1]
-                        file_id = photo['file_id']
-                        
-                        # Enviar mensaje de "procesando"
-                        enviar_mensaje_telegram(
-                            chat_id, 
-                            "🔍 Analizando imagen..."
-                        )
-                        
-                        # Descargar y analizar
-                        imagen_bytes = descargar_imagen_telegram(file_id)
-                        clase, conf, imagen_resultado = analizar_imagen_yolo(imagen_bytes)
-                        
-                        # Preparar respuesta
-                        ahora = datetime.now(ecuador_tz)
-                        
-                        if clase:
-                            respuesta = f"""
-🍃 *Resultado del Análisis*
-
- *Clase:* {clase}
- *Confianza:* {conf:.2f}%
-⏰ *Hora:* {ahora.strftime('%H:%M:%S')}
-📅 *Fecha:* {ahora.strftime('%d/%m/%Y')}
-
-{'🚨 *¡ALERTA!* Revisa la planta inmediatamente' if clase in ['Crítico', 'Nada Saludable'] else '✅ Hoja en buen estado'}
-                            """
-                            enviar_mensaje_telegram(chat_id, respuesta, imagen_resultado)
-                        else:
-                            enviar_mensaje_telegram(
-                                chat_id,
-                                "❌ No se detectó ninguna hoja en la imagen"
-                            )
-        
-        except Exception as e:
-            print(f"Error en polling: {e}")
-        
-        time.sleep(3)  # Esperar 3 segundos antes de revisar de nuevo
 
 # ==========================================
 # CARGAR MODELO
@@ -161,36 +66,25 @@ def bot_telegram_polling():
 @st.cache_resource
 def load_model():
     model_url = "https://huggingface.co/EAMB2001/detector-plagas-modelo/resolve/main/modelo.pt"
+    
     response = requests.get(model_url)
     model_path = "/tmp/modelo.pt"
     with open(model_path, "wb") as f:
         f.write(response.content)
+    
     return YOLO(model_path)
 
 try:
     model = load_model()
     CLASSES = ['Crítico', 'Nada Saludable', 'Saludable', 'media_saludable']
-    
-    # Iniciar bot de Telegram en segundo plano
-    st.sidebar.success("🤖 Bot de Telegram activo")
-    threading.Thread(target=bot_telegram_polling, daemon=True).start()
-    
 except Exception as e:
     st.error(f"Error cargando el modelo: {e}")
     model = None
 
 # ==========================================
-# INTERFAZ WEB
+# INTERFAZ PRINCIPAL
 # ==========================================
-st.sidebar.markdown("### 📱 Uso del Bot de Telegram")
-st.sidebar.info("""
-1. Abre Telegram
-2. Busca: @detector_plagas_alertas_bot
-3. Envía una imagen de hoja
-4. Recibe el análisis automáticamente
-""")
-
-uploaded_file = st.file_uploader("📷 Sube una imagen de hoja", type=['jpg', 'png', 'jpeg'])
+uploaded_file = st.file_uploader(" Sube una imagen de hoja", type=['jpg', 'png', 'jpeg'])
 
 if uploaded_file is not None and model is not None:
     col1, col2 = st.columns(2)
@@ -225,41 +119,28 @@ if uploaded_file is not None and model is not None:
                         confidence = float(box.conf[0]) * 100
                         st.write(f"• **{cls}**: {confidence:.2f}%")
                     
-                    # Alerta para casos críticos
+                    # ==========================================
+                    # ENVIAR ALERTA A TELEGRAM
+                    # ==========================================
                     if clase in ['Crítico', 'Nada Saludable']:
                         img_byte_arr = BytesIO()
                         image.save(img_byte_arr, format='JPEG')
+                        img_byte_arr = img_byte_arr.getvalue()
                         
-                        ahora = datetime.now(ecuador_tz)
-                        mensaje = f"""
-🚨 *ALERTA DE PLAGA DETECTADA*
-
-🍃 *Clase:* {clase}
-📊 *Confianza:* {conf:.2f}%
-⏰ *Hora:* {ahora.strftime('%H:%M:%S')}
-📅 *Fecha:* {ahora.strftime('%d/%m/%Y')}
-
-⚠️ *Acción recomendada:* Revisar planta inmediatamente
-                        """
-                        
-                        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-                        requests.post(url, json={
-                            "chat_id": TELEGRAM_CHAT_ID,
-                            "text": mensaje,
-                            "parse_mode": "Markdown"
-                        }, timeout=10)
-                        
-                        st.warning("⚠️ **Alerta enviada a Telegram**")
+                        if enviar_alerta_telegram(clase, conf, img_byte_arr):
+                            st.warning("️ **Alerta enviada a Telegram**")
+                        else:
+                            st.error("❌ Error al enviar alerta")
                     else:
                         st.info("✅ Detección normal - Sin alerta")
+                        
                 else:
                     st.warning("No se detectó ninguna hoja")
 
 st.markdown("---")
 st.markdown("""
 ### ℹ️ Información:
-- **Alertas automáticas:** Se envían cuando se detecta 'Crítico' o 'Nada Saludable'
-- **Bot de Telegram:** Envía imágenes al bot para análisis instantáneo
+- **Alertas automáticas:** Se envían solo cuando se detecta 'Crítico' o 'Nada Saludable'
 - **Modelo:** YOLO11s entrenado con mAP50: 82.7%
 - **Zona horaria:** Ecuador (UTC-5)
 """)
