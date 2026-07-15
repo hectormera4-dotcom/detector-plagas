@@ -7,8 +7,8 @@ import os
 
 st.set_page_config(page_title="Detector de Plagas", layout="wide")
 
-st.title("🍃 Detector de Plagas en Hojas")
-st.markdown("### Modelo YOLO11s - mAP50: 82.7%")
+st.title("🍃 Detector de Plaga Mosca Blanca en Hojas de Algodon")
+st.markdown("### By: Erick Mera-Kevin Garcia")
 
 # Cargar modelo
 @st.cache_resource
