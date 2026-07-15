@@ -136,5 +136,6 @@ if uploaded_file is not None and model is not None:
 st.markdown("---")
 st.markdown("""
 ### ️ Información:
-- **Alertas automáticas:** Si se detecta una hoja en estado CRITICO o NADA SALUDABLE se envia una notificacion en tiempo real a Telegram'
+- **Alertas automáticas:** 
+Si se detecta una hoja en estado CRITICO o NADA SALUDABLE se envia una notificacion en tiempo real a Telegram
 """)
